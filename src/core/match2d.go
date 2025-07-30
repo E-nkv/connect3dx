@@ -34,7 +34,6 @@ func (d *Direction) OtherSide() Direction {
 		c = -d.Col
 	}
 	return Direction{Row: r, Col: c}
-
 }
 
 type Point struct {
@@ -52,15 +51,13 @@ type MatchOpts struct {
 	H       int   `json:"h"`
 	A       int   `json:"a"`
 	Starts1 bool  `json:"starts1"`
-	T0      int64 `json:"t0"` //Initial time in seconds
-	TD      int64 `json:"td"` //Seconds to add per move
+	T0      int64 `json:"t0"`
+	TD      int64 `json:"td"`
 }
 
-// FIX: The loop `for i := range H` was incorrect. It should be a standard
-// for loop `for i := 0; i < H; i++` to initialize the board rows.
 func createBoard2D(W, H int) [][]Slot {
 	board := make([][]Slot, H)
-	for i := 0; i < H; i++ {
+	for i := range H {
 		board[i] = make([]Slot, W)
 	}
 	return board
@@ -108,6 +105,7 @@ func (m *Match2D) getCurrPlayer() string {
 	}
 	return m.P2.ID
 }
+
 func (m *Match2D) getRow(col int) int {
 	for i := m.Opts.H - 1; i >= 0; i-- {
 		if m.Board[i][col] == SLOT_EMPTY {
@@ -117,9 +115,6 @@ func (m *Match2D) getRow(col int) int {
 	return -1
 }
 
-// FIX: The second for-loop was starting from the wrong position. It should start
-// from the original point (row, col) and iterate in the `otherDir` direction.
-// The original code was restarting from `row+dir.Row`, which double-counted pieces.
 func (m *Match2D) getVictoryLine(row, col int, dir Direction) Line {
 	v := m.Board[row][col]
 	if v == SLOT_EMPTY {
@@ -127,12 +122,10 @@ func (m *Match2D) getVictoryLine(row, col int, dir Direction) Line {
 	}
 	line := Line{Point{Row: row, Col: col}}
 
-	// Check in the primary direction
 	for i, j := row+dir.Row, col+dir.Col; i >= 0 && i < m.Opts.H && j >= 0 && j < m.Opts.W && m.Board[i][j] == v; i, j = i+dir.Row, j+dir.Col {
 		line = append(line, Point{Row: i, Col: j})
 	}
 
-	// Check in the opposite direction
 	otherDir := dir.OtherSide()
 	for i, j := row+otherDir.Row, col+otherDir.Col; i >= 0 && i < m.Opts.H && j >= 0 && j < m.Opts.W && m.Board[i][j] == v; i, j = i+otherDir.Row, j+otherDir.Col {
 		line = append(line, Point{Row: i, Col: j})
@@ -144,15 +137,12 @@ func (m *Match2D) getVictoryLine(row, col int, dir Direction) Line {
 	return nil
 }
 
-// FIX: The check for a win was `if lines != nil`, which is always true for an
-// initialized slice. It must be changed to `if len(lines) > 0`.
-// The logic is also reordered to check for a win first, then a draw.
 func (m *Match2D) isGameover(row, col int) GameoverResult {
 	dirs := []Direction{
-		{Row: 1, Col: 0},  // Vertical
-		{Row: 0, Col: 1},  // Horizontal
-		{Row: 1, Col: 1},  // Diagonal
-		{Row: 1, Col: -1}, // Anti-Diagonal (Corrected from previous d/ad mixup)
+		{Row: 1, Col: 0},
+		{Row: 0, Col: 1},
+		{Row: 1, Col: 1},
+		{Row: 1, Col: -1},
 	}
 	var lines []Line
 	for _, dir := range dirs {
@@ -162,21 +152,17 @@ func (m *Match2D) isGameover(row, col int) GameoverResult {
 		}
 	}
 
-	// If any winning lines were found, the game is won.
 	if len(lines) > 0 {
 		return GameoverResult{"resType": RESULT_TYPE_WON, "lines": lines}
 	}
 
-	// If no win, check if the board is full (draw).
 	if len(m.Moves) == m.Opts.H*m.Opts.W {
 		return GameoverResult{"resType": RESULT_TYPE_DRAW}
 	}
 
-	// No win, no draw, game continues.
 	return nil
 }
 
-// returns whether it was a normal move, the result if it was a decisive move, and the error if any
 func (m *Match2D) RegisterMove(move Move, pid string) (GameoverResult, error) {
 	if move.Col < 0 || move.Col >= m.Opts.W {
 		return nil, fmt.Errorf("invalid column")
