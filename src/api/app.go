@@ -25,14 +25,17 @@ var upg = websocket.Upgrader{
 }
 
 func (app *App) HandleWs(w http.ResponseWriter, r *http.Request) {
+	tokenCookie, err := r.Cookie("token")
+	if err != nil {
+		fmt.Println("token not found in cookie")
+		return
+	}
+	fmt.Println("token is: ", tokenCookie.Value)
 	conn, err := upg.Upgrade(w, r, nil)
 	if err != nil {
 		fmt.Println("err upgrading conn: ", conn)
 		return
 	}
-	/* userID := r.URL.Query().Get("id")
-	if userID == "" {
-		panic("userid empty")
-	} */
-	go app.Hub.ListenFromUser("testID", conn)
+
+	go app.Hub.ListenFromUser(tokenCookie.Value, conn)
 }
