@@ -1,0 +1,40 @@
+Core Functionality: Users can play games against each other, both 2d and 3d, with varying board types and time options
+
+
+System Design:
+
+DB instance with users, matches_2d, matches_3d
+Websocket Go Server(s) for real time communication
+In-Mem cache to store matches (both 2d, 3d) being played
+React frontend 
+
+Object Oriented Design:
+
+CLASS GameController:
+- matches Match[]
+- player1 Player
+- player2 Player
+- opts GameOptions
+
+
+CLASS Match:
+    -id ID
+    -state Board
+    -timeData TimeData
+    -startsP1 bool
+    + isGameOver(col : int, isP1: bool) (result : GameOverResult, gameOver : bool, err : error)
+    
+CLASS TimeData:
+    -created_at Time
+    -moves Move[]
+
+CLASS Move:
+    -move: string
+    -registered_at: Time
+
+
+
+CLASS Match:
+- state Board
+- startTime Time
+- endTime Time
