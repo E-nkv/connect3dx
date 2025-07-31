@@ -41,6 +41,8 @@ func (h *Hub) ProcessMessage(userID string, conn *websocket.Conn, msg []byte, mt
 		switch Req.Type {
 		case MESSAGE_TYPE_CREATE_MATCH_2D:
 			h.HandleCreateMatch2D(userID, conn, Req)
+		case MESSAGE_TYPE_JOIN_MATCH_2D:
+			h.HandleJoinMatch2D(userID, conn, Req)
 		}
 	default:
 		fmt.Println("expected binary, got msg type: ", mt)

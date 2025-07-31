@@ -1,6 +1,7 @@
 package core
 
 import (
+	"connectx/src/errs"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,6 +25,24 @@ func (c *MatchController2D) CreateMatch(p1ID string, opts MatchOpts) (string, er
 	id := GENERATE_UUID()
 	c.Matches[id] = m
 	return id, nil
+}
+
+func (c *MatchController2D) JoinMatch(playerID string, matchID string) (*Match2D, bool, error) {
+
+	match, ok := c.Matches[matchID]
+	if !ok {
+		return nil, false, errs.ErrNotFound
+	}
+	if match.P2.ID != "" {
+		if match.P1.ID != playerID && match.P2.ID != playerID {
+			return nil, false, errs.ErrUnjoinable
+		}
+		return match, false, nil
+	}
+
+	//first time that user2 joins
+	match.P2.ID = playerID
+	return match, true, nil
 }
 
 var CURRNUM = 0

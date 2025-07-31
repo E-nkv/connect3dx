@@ -85,7 +85,7 @@ type Move struct {
 }
 
 type Match2D struct {
-	Board     [][]Slot
+	Board     [][]Slot ``
 	P1        Player
 	P2        Player
 	Opts      MatchOpts
@@ -115,6 +115,15 @@ func (m *Match2D) getRow(col int) int {
 	return -1
 }
 
+func (m *Match2D) GetEnemyID(pid string) string {
+	if pid != m.P1.ID && pid != m.P2.ID {
+		return ""
+	}
+	if pid == m.P1.ID {
+		return m.P2.ID
+	}
+	return m.P1.ID
+}
 func (m *Match2D) getVictoryLine(row, col int, dir Direction) Line {
 	v := m.Board[row][col]
 	if v == SLOT_EMPTY {
