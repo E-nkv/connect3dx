@@ -3,6 +3,7 @@ package hub
 import (
 	"bytes"
 	"connectx/src/core"
+	"connectx/utils"
 	"encoding/json"
 	"fmt"
 
@@ -79,5 +80,5 @@ func writeMessage(conn *websocket.Conn, status WsStatus, id string, body any) {
 }
 
 func writeError(conn *websocket.Conn, status WsStatus, id string, msg string) {
-	writeMessage(conn, status, id, msg)
+	writeMessage(conn, status, id, utils.Object{"error": msg})
 }

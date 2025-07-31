@@ -1,5 +1,9 @@
 package hub
 
+import (
+	"encoding/json"
+)
+
 type MessageType int
 type WsStatus int
 
@@ -16,9 +20,9 @@ const (
 )
 
 type WsRequest struct {
-	Type MessageType `json:"type"`
-	Body any         `json:"body"`
-	ID   string      `json:"id"`
+	Type MessageType     `json:"type"`
+	Body json.RawMessage `json:"body"`
+	ID   string          `json:"id"`
 }
 
 type WsResponse struct {

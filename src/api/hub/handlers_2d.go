@@ -2,13 +2,15 @@ package hub
 
 import (
 	"connectx/src/core"
+	"encoding/json"
 
 	"github.com/gorilla/websocket"
 )
 
 func (h *Hub) HandleCreateMatch2D(userID string, conn *websocket.Conn, Req WsRequest) {
-	opts, ok := Req.Body.(core.MatchOpts)
-	if !ok {
+	var opts core.MatchOpts
+	err := json.Unmarshal(Req.Body, &opts)
+	if err != nil {
 		writeError(conn, WS_STATUS_BAD_REQUEST, Req.ID, "Invalid Request Body")
 		return
 	}
