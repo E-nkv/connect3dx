@@ -1,6 +1,7 @@
 package api
 
 import (
+	"connectx/src/api/hub"
 	"fmt"
 	"net/http"
 	"time"
@@ -9,12 +10,12 @@ import (
 )
 
 type App struct {
-	Hub *Hub
+	Hub *hub.Hub
 }
 
 func NewApp() *App {
 	return &App{
-		Hub: newHub(),
+		Hub: hub.NewHub(),
 	}
 }
 
