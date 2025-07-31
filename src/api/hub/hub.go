@@ -3,6 +3,7 @@ package hub
 import (
 	"bytes"
 	"connectx/src/core"
+	"connectx/src/models"
 	"connectx/utils"
 	"encoding/json"
 	"fmt"
@@ -16,14 +17,15 @@ var (
 )
 
 type Hub struct {
-	Users             map[string]*websocket.Conn
+	UserConns         map[string]*websocket.Conn
+	UserModel         *models.User
 	MatchController2D *core.MatchController2D
 	MatchController3D *core.MatchController3D
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		Users:             make(map[string]*websocket.Conn),
+		UserConns:         make(map[string]*websocket.Conn),
 		MatchController2D: core.NewMatchController2D(),
 		MatchController3D: core.NewMatchController3D(),
 	}
@@ -56,7 +58,7 @@ func (hub *Hub) ListenFromUser(userID string, conn *websocket.Conn) error {
 		if err != nil {
 			//probably disconnected
 			fmt.Println("error reading message: ", err)
-			delete(hub.Users, userID)
+			delete(hub.UserConns, userID)
 			return err
 		}
 

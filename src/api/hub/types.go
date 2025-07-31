@@ -42,6 +42,7 @@ type PlayerDTO struct {
 	Nick     string
 	ImgURL   string
 }
+
 type Match2DDTO struct {
 	Board     [][]core.Slot `json:"board"`
 	P1        PlayerDTO

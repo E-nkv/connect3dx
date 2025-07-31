@@ -47,8 +47,6 @@ func TestGetRow(t *testing.T) {
 	}
 }
 
-// TestGetVictoryLine tests the core win-detection logic with various scenarios.
-// This test assumes a CORRECT implementation. It will fail against the provided buggy code.
 func TestGetVictoryLine(t *testing.T) {
 	opts := MatchOpts{W: 7, H: 6, A: 4}
 
@@ -59,7 +57,7 @@ func TestGetVictoryLine(t *testing.T) {
 		match.Board[5][3] = SLOT_PLAYER1
 		match.Board[5][4] = SLOT_PLAYER1
 		line := match.getVictoryLine(5, 2, Direction{Row: 0, Col: 1})
-		if line == nil || len(line) < 4 {
+		if len(line) < 4 {
 			t.Fatalf("Failed to detect horizontal win. Line was: %v", line)
 		}
 	})
@@ -71,7 +69,7 @@ func TestGetVictoryLine(t *testing.T) {
 		match.Board[4][2] = SLOT_PLAYER2
 		match.Board[5][2] = SLOT_PLAYER2
 		line := match.getVictoryLine(3, 2, Direction{Row: 1, Col: 0})
-		if line == nil || len(line) < 4 {
+		if len(line) < 4 {
 			t.Fatalf("Failed to detect vertical win. Line was: %v", line)
 		}
 	})
@@ -122,6 +120,7 @@ func TestGetVictoryLine(t *testing.T) {
 			t.Fatalf("Incorrectly found a winning line with only 3 pieces: %v", line)
 		}
 	})
+
 }
 
 // TestIsGameover tests the top-level game over logic.
@@ -136,21 +135,71 @@ func TestIsGameover(t *testing.T) {
 			t.Errorf("Expected no gameover, but got %v", res)
 		}
 	})
-
-	t.Run("Game Won", func(t *testing.T) {
-		// This test assumes getVictoryLine works correctly.
+	t.Run("Win - Many Lines", func(t *testing.T) {
 		match := createTestMatch(opts)
-		for i := 0; i < 4; i++ {
-			match.Board[5][i] = SLOT_PLAYER1
-			match.Moves = append(match.Moves, Move{Col: i})
-		}
+		//h win
+		match.Board[5][1] = SLOT_PLAYER1
+		match.Board[5][2] = SLOT_PLAYER1
+		match.Board[5][3] = SLOT_PLAYER1
+		match.Board[5][4] = SLOT_PLAYER1
+		match.Board[5][5] = SLOT_PLAYER1
+		match.Board[5][6] = SLOT_PLAYER1
+		//v win
+		match.Board[4][3] = SLOT_PLAYER1
+		match.Board[3][3] = SLOT_PLAYER1
+		match.Board[2][3] = SLOT_PLAYER1
+		match.Board[1][3] = SLOT_PLAYER1
 		res := match.isGameover(5, 3)
-		if res == nil {
-			t.Fatal("Expected a winning result, but got nil")
-		}
 		if res["resType"] != RESULT_TYPE_WON {
-			t.Errorf("Expected result type WON, but got %v", res["resType"])
+			t.Fatal("expected to win")
 		}
+
+		t.Log("lines are: ", res["lines"])
+	})
+	t.Run("Game Won", func(t *testing.T) {
+		t.Run("vertical", func(t *testing.T) {
+			match := createTestMatch(opts)
+			match.Board[4][3] = SLOT_PLAYER1
+			match.Board[3][3] = SLOT_PLAYER1
+			match.Board[2][3] = SLOT_PLAYER1
+			match.Board[1][3] = SLOT_PLAYER1
+			res := match.isGameover(4, 3)
+			if res["resType"] != RESULT_TYPE_WON {
+				t.Error("expected win")
+			}
+			t.Log("vertical lines are: ", res["lines"])
+		})
+		t.Run("horizontal", func(t *testing.T) {
+			match := createTestMatch(opts)
+			match.Board[0][1] = SLOT_PLAYER1
+			match.Board[0][2] = SLOT_PLAYER1
+			match.Board[0][3] = SLOT_PLAYER1
+			match.Board[0][4] = SLOT_PLAYER1
+			res := match.isGameover(0, 1)
+			if res["resType"] != RESULT_TYPE_WON {
+				t.Error("expected win")
+			}
+			t.Log("horizontal lines are: ", res["lines"])
+		})
+		t.Run("hv", func(t *testing.T) {
+			match := createTestMatch(opts)
+
+			match.Board[3][3] = SLOT_PLAYER1
+			match.Board[2][3] = SLOT_PLAYER1
+			match.Board[1][3] = SLOT_PLAYER1
+			match.Board[0][3] = SLOT_PLAYER1
+
+			match.Board[0][0] = SLOT_PLAYER1
+			match.Board[0][1] = SLOT_PLAYER1
+			match.Board[0][2] = SLOT_PLAYER1
+
+			res := match.isGameover(0, 3)
+			if res["resType"] != RESULT_TYPE_WON {
+				t.Error("expected win")
+			}
+			t.Log("horizontal lines are: ", res["lines"])
+		})
+
 	})
 
 	t.Run("Game is a Draw", func(t *testing.T) {

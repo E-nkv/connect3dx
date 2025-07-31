@@ -51,16 +51,24 @@ func (h *Hub) HandleJoinMatch2D(userID string, conn *websocket.Conn, req WsReque
 		return
 	}
 
+	var enemyConn *websocket.Conn
 	var playerDTO *PlayerDTO
 	if isFirstTimeJoiner {
 		enemyID := match.GetEnemyID(userID)
-		enemyConn, ok := h.Users[enemyID]
+		ec, ok := h.UserConns[enemyID]
 		if !ok {
 			//TODO: contiously check player1 connection to send him the enemy joined message
 			return
 		}
-		writeMessage(enemyConn, WS_STATUS_ENEMY_JOINED, req.ID, playerDTO)
+		enemyConn = ec
+		playerData, err := h.UserModel.GetUserDTO(userID)
+		if err != nil {
+			//handle err
+		}
+		playerDTO = playerData
+
 	}
-	writeMessage(conn, WS_STATUS_OK, req.ID, match)
 	match.StartedAt = time.Now()
+	go writeMessage(enemyConn, WS_STATUS_ENEMY_JOINED, req.ID, playerDTO)
+	writeMessage(conn, WS_STATUS_OK, req.ID, match)
 }
