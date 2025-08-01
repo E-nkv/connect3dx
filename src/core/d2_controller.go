@@ -2,13 +2,19 @@ package core
 
 import (
 	"connectx/src/errs"
+	"connectx/src/types"
+	"sync"
+	"time"
+
 	"fmt"
-	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type MatchController2D struct {
-	Matches map[string]*Match2D
+	Matches      map[string]*Match2D
+	MatchesMutex sync.Mutex
 }
 
 func NewMatchController2D() *MatchController2D {
@@ -22,13 +28,16 @@ func (c *MatchController2D) CreateMatch(p1ID string, opts MatchOpts) (string, er
 		return "", fmt.Errorf("invalid match options: %s", err.Error())
 	}
 	m := NewMatch2D(p1ID, "", opts)
-	id := GENERATE_UUID()
+	id := uuid.New().String()
+	c.MatchesMutex.Lock()
 	c.Matches[id] = m
+	c.MatchesMutex.Unlock()
 	return id, nil
 }
 
 func (c *MatchController2D) JoinMatch(playerID string, matchID string) (*Match2D, bool, error) {
-
+	c.MatchesMutex.Lock()
+	defer c.MatchesMutex.Unlock()
 	match, ok := c.Matches[matchID]
 	if !ok {
 		return nil, false, errs.ErrNotFound
@@ -45,12 +54,6 @@ func (c *MatchController2D) JoinMatch(playerID string, matchID string) (*Match2D
 	return match, true, nil
 }
 
-var CURRNUM = 0
-
-func GENERATE_UUID() string {
-	CURRNUM++
-	return strconv.Itoa(CURRNUM)
-}
 func validMatchOptions(opts MatchOpts) error {
 	errs := []string{}
 	if opts.W < 3 || opts.W > 15 {
@@ -71,4 +74,19 @@ func validMatchOptions(opts MatchOpts) error {
 	}
 	return nil
 
+}
+
+func (c *MatchController2D) RegisterMove(userID string, pl types.RegisterMovePL) (*Match2D, GameoverResult, error) {
+	c.MatchesMutex.Lock()
+	m, ok := c.Matches[pl.MatchID]
+	c.MatchesMutex.Unlock()
+	if !ok {
+		return nil, nil, errs.ErrNotFound
+	}
+	move := Move{Col: pl.Col, RegisteredAt: time.Now()}
+	res, err := m.RegisterMove(move, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return m, res, nil
 }

@@ -1,12 +1,14 @@
 package models
 
 import (
-	"connectx/src/api/hub"
+	"connectx/src/core"
 )
 
 type User struct {
 }
 
-func (userModel *User) GetUserDTO(userID string) (*hub.PlayerDTO, error) {
-
+func (userModel *User) GetUserDTO(userID string) (*core.PlayerDTO, error) {
+	return &core.PlayerDTO{
+		ID: userID,
+	}, nil
 }

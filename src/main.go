@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	app := api.App{}
+	app := api.NewApp()
 	m := http.NewServeMux()
 	m.HandleFunc("/ws", app.HandleWs)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

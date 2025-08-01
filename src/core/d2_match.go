@@ -24,6 +24,19 @@ type Direction struct {
 	Col int
 }
 
+type Move struct {
+	Col          int
+	RegisteredAt time.Time
+}
+type MatchOpts struct {
+	W       int   `json:"w"`
+	H       int   `json:"h"`
+	A       int   `json:"a"`
+	Starts1 bool  `json:"starts1"`
+	T0      int64 `json:"t0"`
+	TD      int64 `json:"td"`
+}
+
 func (d *Direction) OtherSide() Direction {
 	r := 0
 	if d.Row != 0 {
@@ -44,15 +57,6 @@ type Line []Point
 type Player struct {
 	ID       string
 	TimeLeft int64
-}
-
-type MatchOpts struct {
-	W       int   `json:"w"`
-	H       int   `json:"h"`
-	A       int   `json:"a"`
-	Starts1 bool  `json:"starts1"`
-	T0      int64 `json:"t0"`
-	TD      int64 `json:"td"`
 }
 
 func createBoard2D(W, H int) [][]Slot {
@@ -79,15 +83,25 @@ func NewMatch2D(p1ID, p2ID string, opts MatchOpts) *Match2D {
 	}
 }
 
-type Move struct {
-	Col          int
-	RegisteredAt time.Time
-}
-
 type Match2D struct {
 	Board     [][]Slot ``
 	P1        Player
 	P2        Player
+	Opts      MatchOpts
+	Moves     []Move
+	StartedAt time.Time
+}
+
+type PlayerDTO struct {
+	ID       string `json:"id"`
+	TimeLeft int64
+	Nick     string
+	ImgURL   string
+}
+type Match2DDTO struct {
+	Board     [][]int `json:"board"`
+	P1        PlayerDTO
+	P2        PlayerDTO
 	Opts      MatchOpts
 	Moves     []Move
 	StartedAt time.Time
