@@ -82,14 +82,14 @@ func validMatchOptions3D(opts MatchOpts3D) error {
 
 }
 
-func (c *MatchController3D) RegisterMove(userID string, pl types.RegisterMovePL) (*Match3D, GameoverResult3D, error) {
+func (c *MatchController3D) RegisterMove(userID string, pl types.RegisterMove3DPL) (*Match3D, GameoverResult3D, error) {
 	c.MatchesMutex.Lock()
 	m, ok := c.Matches[pl.MatchID]
 	c.MatchesMutex.Unlock()
 	if !ok {
 		return nil, nil, errs.ErrNotFound
 	}
-	move := Move3D{Col: pl.Col, RegisteredAt: time.Now()}
+	move := Move3D{Col: pl.Col, Row: pl.Row, RegisteredAt: time.Now()}
 	res, err := m.RegisterMove(move, userID)
 	if err != nil {
 		return nil, nil, err

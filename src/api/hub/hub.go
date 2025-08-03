@@ -51,6 +51,12 @@ func (h *Hub) ProcessMessage(userID string, conn *websocket.Conn, msg []byte, mt
 			h.HandleJoinMatch2D(userID, conn, req)
 		case MESSAGE_TYPE_REGISTER_MOVE_2D:
 			h.HandleRegisterMove2D(userID, conn, req)
+		case MESSAGE_TYPE_CREATE_MATCH_3D:
+			h.HandleCreateMatch3D(userID, conn, req)
+		case MESSAGE_TYPE_JOIN_MATCH_3D:
+			h.HandleJoinMatch3D(userID, conn, req)
+		case MESSAGE_TYPE_REGISTER_MOVE_3D:
+			h.HandleRegisterMove3D(userID, conn, req)
 		}
 	default:
 		fmt.Println("expected binary, got msg type: ", mt)

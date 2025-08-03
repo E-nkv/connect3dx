@@ -57,24 +57,23 @@ func (h *Hub) HandleJoinMatch2D(userID string, conn *websocket.Conn, req WsReque
 		enemyConn, ok := h.UserConns[enemyID]
 		h.UserConnsMutex.Unlock()
 
-		if !ok {
-			// Player 1 is not connected. We can't notify them.
-			// The join for player 2 will succeed, and when player 1 reconnects,
-			// they should fetch the latest match state.
-			// For now, we just can't send the ENEMY_JOINED message.
-		} else {
+		if ok {
 			playerData, err := h.UserModel.GetUserDTO(userID)
 			if err != nil {
 				writeError(conn, WS_STATUS_SERVER_ERROR, req.ID, "Could not retrieve joining player's data")
-				// Note: The player has technically joined the match state in the controller.
-				// A robust implementation would revert this. For now, we abort the handler.
 				return
 			}
-			go writeMessage(enemyConn, WS_STATUS_ENEMY_JOINED, req.ID, playerData)
+			go writeMessage(enemyConn, WS_STATUS_ENEMY_JOINED, "-1", playerData)
 		}
 	}
 
-	writeMessage(conn, WS_STATUS_OK, req.ID, match)
+	matchDTO, err := match.ToDTO(h.UserModel)
+	if err != nil {
+		writeError(conn, WS_STATUS_SERVER_ERROR, req.ID, "could not create match DTO")
+		return
+	}
+
+	writeMessage(conn, WS_STATUS_OK, req.ID, matchDTO)
 }
 
 func (h *Hub) HandleRegisterMove2D(userID string, conn *websocket.Conn, req WsRequest) {

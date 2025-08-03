@@ -70,13 +70,52 @@ type Match3D struct {
 }
 
 type Match3DDTO struct {
-	Board     [][]int `json:"board"`
-	P1        PlayerDTO
-	P2        PlayerDTO
-	Opts      MatchOpts
-	Moves     []Move
+	Board     [][][]int `json:"board"`
+	P1        *PlayerDTO
+	P2        *PlayerDTO
+	Opts      MatchOpts3D
+	Moves     []Move3D
 	StartedAt time.Time
 }
+
+func (m *Match3D) ToDTO(userModel DTOGetter) (*Match3DDTO, error) {
+	p1, err := userModel.GetUserDTO(m.P1.ID)
+	if err != nil {
+		return nil, err
+	}
+	p1.TimeLeft = m.P1.TimeLeft
+
+	var p2 *PlayerDTO
+	if m.P2.ID != "" {
+		p2, err = userModel.GetUserDTO(m.P2.ID)
+		if err != nil {
+			return nil, err
+		}
+		p2.TimeLeft = m.P2.TimeLeft
+	}
+
+	// Convert board
+	boardDTO := make([][][]int, len(m.Board))
+	for i, layer := range m.Board {
+		boardDTO[i] = make([][]int, len(layer))
+		for j, row := range layer {
+			boardDTO[i][j] = make([]int, len(row))
+			for k, slot := range row {
+				boardDTO[i][j][k] = int(slot)
+			}
+		}
+	}
+
+	return &Match3DDTO{
+		Board:     boardDTO,
+		P1:        p1,
+		P2:        p2,
+		Opts:      m.Opts,
+		Moves:     m.Moves,
+		StartedAt: m.StartedAt,
+	}, nil
+}
+
 
 type GameoverResult3D map[string]any
 

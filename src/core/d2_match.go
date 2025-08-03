@@ -98,20 +98,50 @@ type Match2D struct {
 	StartedAt time.Time
 }
 
-type PlayerDTO struct {
-	ID       string `json:"id"`
-	TimeLeft int64
-	Nick     string
-	ImgURL   string
-}
 type Match2DDTO struct {
 	Board     [][]int `json:"board"`
-	P1        PlayerDTO
-	P2        PlayerDTO
+	P1        *PlayerDTO
+	P2        *PlayerDTO
 	Opts      MatchOpts
 	Moves     []Move
 	StartedAt time.Time
 }
+
+func (m *Match2D) ToDTO(userModel DTOGetter) (*Match2DDTO, error) {
+	p1, err := userModel.GetUserDTO(m.P1.ID)
+	if err != nil {
+		return nil, err
+	}
+	p1.TimeLeft = m.P1.TimeLeft
+
+	var p2 *PlayerDTO
+	if m.P2.ID != "" {
+		p2, err = userModel.GetUserDTO(m.P2.ID)
+		if err != nil {
+			return nil, err
+		}
+		p2.TimeLeft = m.P2.TimeLeft
+	}
+
+	// Convert board
+	boardDTO := make([][]int, len(m.Board))
+	for i, row := range m.Board {
+		boardDTO[i] = make([]int, len(row))
+		for j, slot := range row {
+			boardDTO[i][j] = int(slot)
+		}
+	}
+
+	return &Match2DDTO{
+		Board:     boardDTO,
+		P1:        p1,
+		P2:        p2,
+		Opts:      m.Opts,
+		Moves:     m.Moves,
+		StartedAt: m.StartedAt,
+	}, nil
+}
+
 
 type GameoverResult map[string]any
 
