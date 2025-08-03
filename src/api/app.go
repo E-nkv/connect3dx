@@ -2,6 +2,7 @@ package api
 
 import (
 	"connectx/src/api/hub"
+	"connectx/src/models"
 	"fmt"
 	"net/http"
 	"time"
@@ -14,8 +15,9 @@ type App struct {
 }
 
 func NewApp() *App {
+	userModel := &models.User{}
 	return &App{
-		Hub: hub.NewHub(),
+		Hub: hub.NewHub(userModel),
 	}
 }
 

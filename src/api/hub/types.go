@@ -39,3 +39,5 @@ type WsResponse struct {
 	Status WsStatus `json:"status"`
 	Body   any      `json:"body"`
 }
+
+

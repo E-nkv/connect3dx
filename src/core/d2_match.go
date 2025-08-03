@@ -90,12 +90,14 @@ func NewMatch2D(p1ID, p2ID string, opts MatchOpts) (*Match2D, error) {
 }
 
 type Match2D struct {
-	Board     [][]Slot ``
+	Board     [][]Slot
 	P1        Player
 	P2        Player
 	Opts      MatchOpts
 	Moves     []Move
 	StartedAt time.Time
+	Started   bool
+	Gameover  bool
 }
 
 type Match2DDTO struct {
@@ -105,6 +107,8 @@ type Match2DDTO struct {
 	Opts      MatchOpts
 	Moves     []Move
 	StartedAt time.Time
+	Started   bool
+	Gameover  bool
 }
 
 func (m *Match2D) ToDTO(userModel DTOGetter) (*Match2DDTO, error) {
@@ -116,6 +120,7 @@ func (m *Match2D) ToDTO(userModel DTOGetter) (*Match2DDTO, error) {
 
 	var p2 *PlayerDTO
 	if m.P2.ID != "" {
+		var err error
 		p2, err = userModel.GetUserDTO(m.P2.ID)
 		if err != nil {
 			return nil, err
@@ -139,15 +144,16 @@ func (m *Match2D) ToDTO(userModel DTOGetter) (*Match2DDTO, error) {
 		Opts:      m.Opts,
 		Moves:     m.Moves,
 		StartedAt: m.StartedAt,
+		Started:   m.Started,
+		Gameover:  m.Gameover,
 	}, nil
 }
 
 
 type GameoverResult map[string]any
 
-func (m *Match2D) getCurrPlayer() string {
-	isP1Turn := (len(m.Moves)%2 == 0 && m.Opts.Starts1) || (len(m.Moves)%2 != 0 && !m.Opts.Starts1)
-	if isP1Turn {
+func (m *Match2D) getCurrPlayerID() string {
+	if (len(m.Moves)%2 == 0) == m.Opts.Starts1 {
 		return m.P1.ID
 	}
 	return m.P2.ID
@@ -221,10 +227,16 @@ func (m *Match2D) isGameover(row, col int) GameoverResult {
 }
 
 func (m *Match2D) RegisterMove(move Move, pid string) (GameoverResult, error) {
+	if m.Gameover {
+		return nil, fmt.Errorf("game is over")
+	}
+	if !m.Started {
+		return nil, fmt.Errorf("match has not started yet")
+	}
 	if move.Col < 0 || move.Col >= m.Opts.W {
 		return nil, fmt.Errorf("invalid column")
 	}
-	currPID := m.getCurrPlayer()
+	currPID := m.getCurrPlayerID()
 	if currPID != pid {
 		return nil, fmt.Errorf("not your turn")
 	}
@@ -238,5 +250,8 @@ func (m *Match2D) RegisterMove(move Move, pid string) (GameoverResult, error) {
 	}
 	m.Moves = append(m.Moves, move)
 	res := m.isGameover(row, move.Col)
+	if res != nil {
+		m.Gameover = true
+	}
 	return res, nil
 }

@@ -67,6 +67,8 @@ type Match3D struct {
 	Opts      MatchOpts3D
 	Moves     []Move3D
 	StartedAt time.Time
+	Started   bool
+	Gameover  bool
 }
 
 type Match3DDTO struct {
@@ -76,6 +78,8 @@ type Match3DDTO struct {
 	Opts      MatchOpts3D
 	Moves     []Move3D
 	StartedAt time.Time
+	Started   bool
+	Gameover  bool
 }
 
 func (m *Match3D) ToDTO(userModel DTOGetter) (*Match3DDTO, error) {
@@ -87,6 +91,7 @@ func (m *Match3D) ToDTO(userModel DTOGetter) (*Match3DDTO, error) {
 
 	var p2 *PlayerDTO
 	if m.P2.ID != "" {
+		var err error
 		p2, err = userModel.GetUserDTO(m.P2.ID)
 		if err != nil {
 			return nil, err
@@ -113,18 +118,16 @@ func (m *Match3D) ToDTO(userModel DTOGetter) (*Match3DDTO, error) {
 		Opts:      m.Opts,
 		Moves:     m.Moves,
 		StartedAt: m.StartedAt,
+		Started:   m.Started,
+		Gameover:  m.Gameover,
 	}, nil
 }
 
 
 type GameoverResult3D map[string]any
 
-func (m *Match3D) getCurrPlayer() string {
-	moves1 := false
-	if (m.Opts.Starts1 && len(m.Moves)%2 == 0) || (!m.Opts.Starts1 && len(m.Moves)%2 == 1) {
-		moves1 = true
-	}
-	if moves1 {
+func (m *Match3D) getCurrPlayerID() string {
+	if (len(m.Moves)%2 == 0) == m.Opts.Starts1 {
 		return m.P1.ID
 	}
 	return m.P2.ID
@@ -244,13 +247,19 @@ func (m *Match3D) isGameover(row, col, h int) GameoverResult3D {
 }
 
 func (m *Match3D) RegisterMove(move Move3D, pid string) (GameoverResult3D, error) {
+	if m.Gameover {
+		return nil, fmt.Errorf("game is over")
+	}
+	if !m.Started {
+		return nil, fmt.Errorf("match has not started yet")
+	}
 	if move.Row < 0 || move.Row >= m.Opts.R {
 		return nil, fmt.Errorf("invalid row")
 	}
 	if move.Col < 0 || move.Col >= m.Opts.C {
 		return nil, fmt.Errorf("invalid column")
 	}
-	currPID := m.getCurrPlayer()
+	currPID := m.getCurrPlayerID()
 	if currPID != pid {
 		return nil, fmt.Errorf("not your turn")
 	}
@@ -264,5 +273,8 @@ func (m *Match3D) RegisterMove(move Move3D, pid string) (GameoverResult3D, error
 	}
 	m.Moves = append(m.Moves, move)
 	res := m.isGameover(move.Row, move.Col, h)
+	if res != nil {
+		m.Gameover = true
+	}
 	return res, nil
 }

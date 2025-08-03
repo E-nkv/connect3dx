@@ -56,6 +56,8 @@ func (c *MatchController2D) JoinMatch(playerID string, matchID string) (*Match2D
 
 	//first time that user2 joins
 	match.P2.ID = playerID
+	match.Started = true
+	match.StartedAt = time.Now()
 	return match, true, nil
 }
 

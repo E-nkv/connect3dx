@@ -3,7 +3,6 @@ package hub
 import (
 	"bytes"
 	"connectx/src/core"
-	"connectx/src/models"
 	"connectx/utils"
 	"encoding/json"
 	"fmt"
@@ -21,17 +20,17 @@ var (
 type Hub struct {
 	UserConns         map[string]*websocket.Conn
 	UserConnsMutex    sync.Mutex
-	UserModel         *models.User
+	UserModel         core.DTOGetter
 	MatchController2D *core.MatchController2D
 	MatchController3D *core.MatchController3D
 }
 
-func NewHub() *Hub {
+func NewHub(userModel core.DTOGetter) *Hub {
 	return &Hub{
 		UserConns:         make(map[string]*websocket.Conn),
 		MatchController2D: core.NewMatchController2D(),
 		MatchController3D: core.NewMatchController3D(),
-		UserModel:         &models.User{},
+		UserModel:         userModel,
 	}
 }
 

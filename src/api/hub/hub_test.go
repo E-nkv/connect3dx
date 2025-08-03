@@ -1,8 +1,8 @@
-package hub_test
+package hub
 
 import (
-	"connectx/src/api"
 	"connectx/src/core"
+	"connectx/src/types"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,213 +13,404 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Re-define constants and types for black-box testing
-const (
-	WS_STATUS_OK = iota
-	WS_STATUS_BAD_REQUEST
-	WS_STATUS_SERVER_ERROR
-	WS_STATUS_UNJOINABLE
-	WS_STATUS_ENEMY_JOINED
-)
-const (
-	MESSAGE_TYPE_REGISTER_MOVE_2D = iota
-	MESSAGE_TYPE_JOIN_MATCH_2D
-	MESSAGE_TYPE_CREATE_MATCH_2D
-)
+// mockDTOGetter is a mock implementation of the DTOGetter interface.
+type mockDTOGetter struct{}
 
-type WsRequest struct {
-	Type int             `json:"type"`
-	Body json.RawMessage `json:"body"`
-	ID   string          `json:"id"`
+func (m *mockDTOGetter) GetUserDTO(userID string) (*core.PlayerDTO, error) {
+	return &core.PlayerDTO{
+		ID:   userID,
+		Nick: "player",
+	}, nil
 }
 
-type WsResponse struct {
-	ReqID  string          `json:"req_id"`
-	Status int             `json:"status"`
-	Body   json.RawMessage `json:"body"`
+// newTestHub creates a new Hub for testing purposes.
+func newTestHub() *Hub {
+	return NewHub(&mockDTOGetter{})
 }
 
-// Helper function to create a test server and a client connection
-func setupTestServer(_ *testing.T) (*httptest.Server, *api.App) {
-	app := api.NewApp()
-	server := httptest.NewServer(http.HandlerFunc(app.HandleWs))
-	return server, app
-}
+// newTestConn creates a new websocket connection for testing.
+func newTestConn(t *testing.T) (*websocket.Conn, *websocket.Conn) {
+	// Use a channel to pass the server connection from the handler
+	serverConnChan := make(chan *websocket.Conn)
 
-// Helper function to create a websocket client
-func newWsClient(t *testing.T, serverURL string, userID string) *websocket.Conn {
-	url := "ws" + strings.TrimPrefix(serverURL, "http") + "/ws"
-	header := http.Header{}
-	header.Add("Cookie", "token="+userID)
-	conn, _, err := websocket.DefaultDialer.Dial(url, header)
+	// Create a test server
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Logf("failed to upgrade connection: %v", err)
+			return
+		}
+		serverConnChan <- c
+	}))
+
+	// Convert http:// to ws://
+	u := "ws" + strings.TrimPrefix(s.URL, "http")
+
+	// Connect to the server
+	clientConn, _, err := websocket.DefaultDialer.Dial(u, nil)
 	if err != nil {
-		t.Fatalf("failed to connect to ws: %v", err)
+		s.Close()
+		t.Fatalf("failed to connect to websocket: %v", err)
 	}
-	return conn
+
+	// Wait for the server to send us the connection
+	serverConn := <-serverConnChan
+
+	// The test server and connections will be closed by t.Cleanup()
+	t.Cleanup(func() {
+		clientConn.Close()
+		serverConn.Close()
+		s.Close()
+	})
+
+	return serverConn, clientConn
 }
 
-func TestCreateAndJoinMatch(t *testing.T) {
-	server, _ := setupTestServer(t)
-	defer server.Close()
+func TestHub_HandleCreateMatch2D(t *testing.T) {
+	hub := newTestHub()
+	serverConn, clientConn := newTestConn(t)
+	defer serverConn.Close()
+	defer clientConn.Close()
 
-	// Client 1 creates a match
 	p1ID := "player1"
-	p1Conn := newWsClient(t, server.URL, p1ID)
-	defer p1Conn.Close()
+	hub.UserConns[p1ID] = serverConn
 
-	createReq := WsRequest{
-		ID:   "1",
+	opts := core.MatchOpts{W: 7, H: 6, A: 4}
+	body, _ := json.Marshal(opts)
+	req := WsRequest{
 		Type: MESSAGE_TYPE_CREATE_MATCH_2D,
-		Body: json.RawMessage(`{"w": 7, "h": 6, "a": 4, "starts1": true, "t0": 60, "td": 0}`),
+		ID:   "1",
+		Body: body,
 	}
-	createReqBytes, _ := json.Marshal(createReq)
-	if err := p1Conn.WriteMessage(websocket.BinaryMessage, createReqBytes); err != nil {
-		t.Fatalf("p1 failed to send create message: %v", err)
+	reqBytes, _ := json.Marshal(req)
+
+	hub.ProcessMessage(p1ID, serverConn, reqBytes, websocket.BinaryMessage)
+
+	_, msg, err := clientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message: %v", err)
 	}
 
-	// Read response for create match
-	var createResp WsResponse
-	if err := p1Conn.ReadJSON(&createResp); err != nil {
-		t.Fatalf("p1 failed to read create response: %v", err)
+	var resp WsResponse
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
 	}
 
-	if createResp.Status != WS_STATUS_OK {
-		t.Fatalf("expected status OK, got %d", createResp.Status)
+	if resp.Status != WS_STATUS_OK {
+		t.Errorf("expected status OK, got %v", resp.Status)
 	}
-
-	var createBody struct {
+	if resp.ReqID != "1" {
+		t.Errorf("expected req_id 1, got %s", resp.ReqID)
+	}
+	var respBody struct {
 		ID string `json:"id"`
 	}
-	if err := json.Unmarshal(createResp.Body, &createBody); err != nil {
-		t.Fatalf("failed to unmarshal create response body: %v", err)
+	bodyBytes, err := json.Marshal(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to marshal response body: %v", err)
 	}
-	matchID := createBody.ID
-
-	// Client 2 joins the match
-	p2ID := "player2"
-	p2Conn := newWsClient(t, server.URL, p2ID)
-	defer p2Conn.Close()
-
-	joinReq := WsRequest{
-		ID:   "2",
-		Type: MESSAGE_TYPE_JOIN_MATCH_2D,
-		Body: json.RawMessage(`{"match_id": "` + matchID + `"}`),
+	if err := json.Unmarshal(bodyBytes, &respBody); err != nil {
+		t.Fatalf("failed to unmarshal response body: %v", err)
 	}
-	joinReqBytes, _ := json.Marshal(joinReq)
-	if err := p2Conn.WriteMessage(websocket.BinaryMessage, joinReqBytes); err != nil {
-		t.Fatalf("p2 failed to send join message: %v", err)
-	}
-
-	// P2 reads their own successful join response
-	var joinResp WsResponse
-	if err := p2Conn.ReadJSON(&joinResp); err != nil {
-		t.Fatalf("p2 failed to read join response: %v", err)
-	}
-	if joinResp.Status != WS_STATUS_OK {
-		t.Fatalf("p2 expected status OK, got %d", joinResp.Status)
-	}
-
-	// P1 should receive an ENEMY_JOINED message
-	var enemyJoinedResp WsResponse
-	p1Conn.SetReadDeadline(time.Now().Add(time.Second * 2))
-	if err := p1Conn.ReadJSON(&enemyJoinedResp); err != nil {
-		t.Fatalf("p1 failed to read enemy joined response: %v", err)
-	}
-
-	if enemyJoinedResp.Status != WS_STATUS_ENEMY_JOINED {
-		t.Fatalf("p1 expected status ENEMY_JOINED, got %d", enemyJoinedResp.Status)
-	}
-
-	var enemyData core.PlayerDTO
-	if err := json.Unmarshal(enemyJoinedResp.Body, &enemyData); err != nil {
-		t.Fatalf("failed to unmarshal enemy data: %v", err)
-	}
-
-	if enemyData.ID != p2ID {
-		t.Fatalf("expected enemy ID to be %s, got %s", p2ID, enemyData.ID)
+	if respBody.ID == "" {
+		t.Error("expected a match ID, but it was empty")
 	}
 }
 
-func TestRegisterMove(t *testing.T) {
-	server, _ := setupTestServer(t)
-	defer server.Close()
-
-	// P1 creates a match
-	p1ID := "player1"
-	p1Conn := newWsClient(t, server.URL, p1ID)
+func TestHub_HandleJoinMatch2D(t *testing.T) {
+	hub := newTestHub()
+	p1Conn, p1ClientConn := newTestConn(t)
+	p2Conn, p2ClientConn := newTestConn(t)
 	defer p1Conn.Close()
-
-	createReq := WsRequest{
-		ID:   "1",
-		Type: MESSAGE_TYPE_CREATE_MATCH_2D,
-		Body: json.RawMessage(`{"w": 7, "h": 6, "a": 4, "starts1": true, "t0": 60, "td": 0}`),
-	}
-	createReqBytes, _ := json.Marshal(createReq)
-	p1Conn.WriteMessage(websocket.BinaryMessage, createReqBytes)
-	var createResp WsResponse
-	p1Conn.ReadJSON(&createResp)
-	var createBody struct {
-		ID string `json:"id"`
-	}
-	json.Unmarshal(createResp.Body, &createBody)
-	matchID := createBody.ID
-
-	// P2 joins the match
-	p2ID := "player2"
-	p2Conn := newWsClient(t, server.URL, p2ID)
+	defer p1ClientConn.Close()
 	defer p2Conn.Close()
+	defer p2ClientConn.Close()
 
-	joinReq := WsRequest{
-		ID:   "2",
+	p1ID := "player1"
+	p2ID := "player2"
+	hub.UserConns[p1ID] = p1Conn
+	hub.UserConns[p2ID] = p2Conn
+
+	opts := core.MatchOpts{W: 7, H: 6, A: 4}
+	matchID, _ := hub.MatchController2D.CreateMatch(p1ID, opts)
+
+	joinReq := types.JoinMatchPL{MatchID: matchID}
+	body, _ := json.Marshal(joinReq)
+	req := WsRequest{
 		Type: MESSAGE_TYPE_JOIN_MATCH_2D,
-		Body: json.RawMessage(`{"match_id": "` + matchID + `"}`),
+		ID:   "2",
+		Body: body,
 	}
-	joinReqBytes, _ := json.Marshal(joinReq)
-	p2Conn.WriteMessage(websocket.BinaryMessage, joinReqBytes)
-	// Clear the two messages P2 and P1 get
-	p2Conn.ReadJSON(&WsResponse{})
-	p1Conn.ReadJSON(&WsResponse{})
+	reqBytes, _ := json.Marshal(req)
 
-	// P1 (who starts) sends a move
-	moveReq := WsRequest{
-		ID:   "3",
+	hub.ProcessMessage(p2ID, p2Conn, reqBytes, websocket.BinaryMessage)
+
+	// Check response to player 2
+	_, msg, err := p2ClientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message from p2: %v", err)
+	}
+	var resp WsResponse
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Status != WS_STATUS_OK {
+		t.Errorf("expected status OK for p2, got %v", resp.Status)
+	}
+
+	// Check message to player 1
+	_, msg, err = p1ClientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message from p1: %v", err)
+	}
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Status != WS_STATUS_ENEMY_JOINED {
+		t.Errorf("expected status ENEMY_JOINED for p1, got %v", resp.Status)
+	}
+}
+
+func TestHub_HandleRegisterMove2D(t *testing.T) {
+	hub := newTestHub()
+	p1Conn, p1ClientConn := newTestConn(t)
+	p2Conn, p2ClientConn := newTestConn(t)
+	defer p1Conn.Close()
+	defer p1ClientConn.Close()
+	defer p2Conn.Close()
+	defer p2ClientConn.Close()
+
+	p1ID := "player1"
+	p2ID := "player2"
+	hub.UserConns[p1ID] = p1Conn
+	hub.UserConns[p2ID] = p2Conn
+
+	opts := core.MatchOpts{W: 7, H: 6, A: 4, Starts1: true}
+	matchID, _ := hub.MatchController2D.CreateMatch(p1ID, opts)
+	hub.MatchController2D.JoinMatch(p2ID, matchID)
+
+	moveReq := types.RegisterMovePL{MatchID: matchID, Col: 0}
+	body, _ := json.Marshal(moveReq)
+	req := WsRequest{
 		Type: MESSAGE_TYPE_REGISTER_MOVE_2D,
-		Body: json.RawMessage(`{"match_id": "` + matchID + `", "col": 3}`),
+		ID:   "3",
+		Body: body,
 	}
-	moveReqBytes, _ := json.Marshal(moveReq)
-	if err := p1Conn.WriteMessage(websocket.BinaryMessage, moveReqBytes); err != nil {
-		t.Fatalf("p1 failed to send move: %v", err)
+	reqBytes, _ := json.Marshal(req)
+
+	hub.ProcessMessage(p1ID, p1Conn, reqBytes, websocket.BinaryMessage)
+
+	// Check response to player 1
+	_, msg, err := p1ClientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message from p1: %v", err)
+	}
+	var resp WsResponse
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Status != WS_STATUS_OK {
+		t.Errorf("expected status OK for p1, got %v", resp.Status)
 	}
 
-	// P1 gets an OK response
-	var moveResp WsResponse
-	if err := p1Conn.ReadJSON(&moveResp); err != nil {
-		t.Fatalf("p1 failed to read move response: %v", err)
+	// Check message to player 2
+	_, msg, err = p2ClientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message from p2: %v", err)
 	}
-	if moveResp.Status != WS_STATUS_OK {
-		t.Fatalf("p1 expected status OK for move, got %d", moveResp.Status)
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Status != WS_STATUS_ENEMY_SENT_MOVE {
+		t.Errorf("expected status ENEMY_SENT_MOVE for p2, got %v", resp.Status)
+	}
+}
+
+func TestHub_HandleCreateMatch3D(t *testing.T) {
+	hub := newTestHub()
+	serverConn, clientConn := newTestConn(t)
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	p1ID := "player1"
+	hub.UserConns[p1ID] = serverConn
+
+	opts := core.MatchOpts3D{R: 4, C: 4, H: 4, A: 4}
+	body, _ := json.Marshal(opts)
+	req := WsRequest{
+		Type: MESSAGE_TYPE_CREATE_MATCH_3D,
+		ID:   "4",
+		Body: body,
+	}
+	reqBytes, _ := json.Marshal(req)
+
+	hub.ProcessMessage(p1ID, serverConn, reqBytes, websocket.BinaryMessage)
+
+	_, msg, err := clientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message: %v", err)
 	}
 
-	// P2 should receive an ENEMY_SENT_MOVE message
-	const WS_STATUS_ENEMY_SENT_MOVE = 5
-	var enemyMoveResp WsResponse
-	p2Conn.SetReadDeadline(time.Now().Add(time.Second * 1))
-	if err := p2Conn.ReadJSON(&enemyMoveResp); err != nil {
-		t.Fatalf("p2 failed to read enemy move notification: %v", err)
+	var resp WsResponse
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
 	}
 
-	if enemyMoveResp.Status != WS_STATUS_ENEMY_SENT_MOVE {
-		t.Fatalf("p2 expected status ENEMY_SENT_MOVE, got %d", enemyMoveResp.Status)
+	if resp.Status != WS_STATUS_OK {
+		t.Errorf("expected status OK, got %v", resp.Status)
+	}
+	if resp.ReqID != "4" {
+		t.Errorf("expected req_id 4, got %s", resp.ReqID)
+	}
+	var respBody struct {
+		ID string `json:"id"`
+	}
+	bodyBytes, err := json.Marshal(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to marshal response body: %v", err)
+	}
+	if err := json.Unmarshal(bodyBytes, &respBody); err != nil {
+		t.Fatalf("failed to unmarshal response body: %v", err)
+	}
+	if respBody.ID == "" {
+		t.Error("expected a match ID, but it was empty")
+	}
+}
+
+func TestHub_HandleJoinMatch3D(t *testing.T) {
+	hub := newTestHub()
+	p1Conn, p1ClientConn := newTestConn(t)
+	p2Conn, p2ClientConn := newTestConn(t)
+	defer p1Conn.Close()
+	defer p1ClientConn.Close()
+	defer p2Conn.Close()
+	defer p2ClientConn.Close()
+
+	p1ID := "player1"
+	p2ID := "player2"
+	hub.UserConns[p1ID] = p1Conn
+	hub.UserConns[p2ID] = p2Conn
+
+	opts := core.MatchOpts3D{R: 4, C: 4, H: 4, A: 4}
+	matchID, _ := hub.MatchController3D.CreateMatch(p1ID, opts)
+
+	joinReq := types.JoinMatchPL{MatchID: matchID}
+	body, _ := json.Marshal(joinReq)
+	req := WsRequest{
+		Type: MESSAGE_TYPE_JOIN_MATCH_3D,
+		ID:   "5",
+		Body: body,
+	}
+	reqBytes, _ := json.Marshal(req)
+
+	hub.ProcessMessage(p2ID, p2Conn, reqBytes, websocket.BinaryMessage)
+
+	// Check response to player 2
+	_, msg, err := p2ClientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message from p2: %v", err)
+	}
+	var resp WsResponse
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Status != WS_STATUS_OK {
+		t.Errorf("expected status OK for p2, got %v", resp.Status)
 	}
 
-	var enemyMoveBody struct {
-		Col int `json:"col"`
+	// Check message to player 1
+	_, msg, err = p1ClientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message from p1: %v", err)
 	}
-	if err := json.Unmarshal(enemyMoveResp.Body, &enemyMoveBody); err != nil {
-		t.Fatalf("p2 failed to unmarshal enemy move body: %v", err)
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Status != WS_STATUS_ENEMY_JOINED {
+		t.Errorf("expected status ENEMY_JOINED for p1, got %v", resp.Status)
+	}
+}
+
+func TestHub_HandleRegisterMove3D(t *testing.T) {
+	hub := newTestHub()
+	p1Conn, p1ClientConn := newTestConn(t)
+	p2Conn, p2ClientConn := newTestConn(t)
+	defer p1Conn.Close()
+	defer p1ClientConn.Close()
+	defer p2Conn.Close()
+	defer p2ClientConn.Close()
+
+	p1ID := "player1"
+	p2ID := "player2"
+	hub.UserConns[p1ID] = p1Conn
+	hub.UserConns[p2ID] = p2Conn
+
+	opts := core.MatchOpts3D{R: 4, C: 4, H: 4, A: 4, Starts1: true}
+	matchID, _ := hub.MatchController3D.CreateMatch(p1ID, opts)
+	hub.MatchController3D.JoinMatch(p2ID, matchID)
+
+	moveReq := types.RegisterMove3DPL{MatchID: matchID, Row: 0, Col: 0}
+	body, _ := json.Marshal(moveReq)
+	req := WsRequest{
+		Type: MESSAGE_TYPE_REGISTER_MOVE_3D,
+		ID:   "6",
+		Body: body,
+	}
+	reqBytes, _ := json.Marshal(req)
+
+	hub.ProcessMessage(p1ID, p1Conn, reqBytes, websocket.BinaryMessage)
+
+	// Check response to player 1
+	_, msg, err := p1ClientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message from p1: %v", err)
+	}
+	var resp WsResponse
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Status != WS_STATUS_OK {
+		t.Errorf("expected status OK for p1, got %v", resp.Status)
 	}
 
-	if enemyMoveBody.Col != 3 {
-		t.Fatalf("p2 expected enemy move in col 3, got %d", enemyMoveBody.Col)
+	// Check message to player 2
+	_, msg, err = p2ClientConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("failed to read message from p2: %v", err)
+	}
+	if err := json.Unmarshal(msg, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.Status != WS_STATUS_ENEMY_SENT_MOVE {
+		t.Errorf("expected status ENEMY_SENT_MOVE for p2, got %v", resp.Status)
+	}
+}
+
+
+func TestHub_ListenFromUser_Disconnect(t *testing.T) {
+	hub := newTestHub()
+	serverConn, clientConn := newTestConn(t)
+
+	p1ID := "player1"
+
+	go func() {
+		// This will block until the connection is closed
+		hub.ListenFromUser(p1ID, serverConn)
+	}()
+
+	// Wait a moment to ensure the user is registered
+	time.Sleep(100 * time.Millisecond)
+
+	// Close the client connection to simulate a disconnect
+	clientConn.Close()
+
+	// Wait a moment to ensure the disconnect is processed
+	time.Sleep(100 * time.Millisecond)
+
+	hub.UserConnsMutex.Lock()
+	defer hub.UserConnsMutex.Unlock()
+	if _, ok := hub.UserConns[p1ID]; ok {
+		t.Error("user connection was not removed after disconnect")
 	}
 }
