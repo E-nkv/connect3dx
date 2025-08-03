@@ -4,21 +4,6 @@ import (
 	"testing"
 )
 
-// Helper function to create a match instance for testing, bypassing the buggy NewMatch2D.
-func createTestMatch(opts MatchOpts) *Match2D {
-	board := make([][]Slot, opts.H)
-	for i := 0; i < opts.H; i++ {
-		board[i] = make([]Slot, opts.W)
-	}
-	return &Match2D{
-		Opts:  opts,
-		P1:    Player{ID: "p1"},
-		P2:    Player{ID: "p2"},
-		Board: board,
-		Moves: make([]Move, 0),
-	}
-}
-
 // TestDirection_OtherSide tests the simple direction inversion.
 func TestDirection_OtherSide(t *testing.T) {
 	dir := Direction{Row: 1, Col: -1}
@@ -28,9 +13,11 @@ func TestDirection_OtherSide(t *testing.T) {
 	}
 }
 
-// TestGetRow correctly identifies the next available row.
 func TestGetRow(t *testing.T) {
-	match := createTestMatch(MatchOpts{W: 3, H: 3})
+	match, err := NewMatch2D("p1", "p2", MatchOpts{W: 3, H: 3, A: 3})
+	if err != nil {
+		t.Fatal("Failed to create match:", err)
+	}
 	match.Board[2][1] = SLOT_PLAYER1
 	match.Board[1][1] = SLOT_PLAYER2
 
@@ -51,7 +38,7 @@ func TestGetVictoryLine(t *testing.T) {
 	opts := MatchOpts{W: 7, H: 6, A: 4}
 
 	t.Run("Horizontal Win", func(t *testing.T) {
-		match := createTestMatch(opts)
+		match, _ := NewMatch2D("p1", "p2", opts)
 		match.Board[5][1] = SLOT_PLAYER1
 		match.Board[5][2] = SLOT_PLAYER1
 		match.Board[5][3] = SLOT_PLAYER1
@@ -63,7 +50,7 @@ func TestGetVictoryLine(t *testing.T) {
 	})
 
 	t.Run("Vertical Win", func(t *testing.T) {
-		match := createTestMatch(opts)
+		match, _ := NewMatch2D("p1", "p2", opts)
 		match.Board[2][2] = SLOT_PLAYER2
 		match.Board[3][2] = SLOT_PLAYER2
 		match.Board[4][2] = SLOT_PLAYER2
@@ -75,7 +62,7 @@ func TestGetVictoryLine(t *testing.T) {
 	})
 
 	t.Run("Diagonal Win", func(t *testing.T) {
-		match := createTestMatch(opts)
+		match, _ := NewMatch2D("p1", "p2", opts)
 		match.Board[2][2] = SLOT_PLAYER1
 		match.Board[3][3] = SLOT_PLAYER1
 		match.Board[4][4] = SLOT_PLAYER1
@@ -87,7 +74,7 @@ func TestGetVictoryLine(t *testing.T) {
 	})
 
 	t.Run("Anti-Diagonal Win", func(t *testing.T) {
-		match := createTestMatch(opts)
+		match, _ := NewMatch2D("p1", "p2", opts)
 		match.Board[5][1] = SLOT_PLAYER2
 		match.Board[4][2] = SLOT_PLAYER2
 		match.Board[3][3] = SLOT_PLAYER2
@@ -99,7 +86,7 @@ func TestGetVictoryLine(t *testing.T) {
 	})
 
 	t.Run("No Win - Interrupted Line", func(t *testing.T) {
-		match := createTestMatch(opts)
+		match, _ := NewMatch2D("p1", "p2", opts)
 		match.Board[5][1] = SLOT_PLAYER1
 		match.Board[5][2] = SLOT_PLAYER1
 		match.Board[5][3] = SLOT_PLAYER2 // Opponent's piece breaks the line
@@ -111,7 +98,7 @@ func TestGetVictoryLine(t *testing.T) {
 	})
 
 	t.Run("No Win - Not Enough Pieces", func(t *testing.T) {
-		match := createTestMatch(opts)
+		match, _ := NewMatch2D("p1", "p2", opts)
 		match.Board[5][1] = SLOT_PLAYER1
 		match.Board[5][2] = SLOT_PLAYER1
 		match.Board[5][3] = SLOT_PLAYER1
@@ -123,12 +110,11 @@ func TestGetVictoryLine(t *testing.T) {
 
 }
 
-// TestIsGameover tests the top-level game over logic.
 func TestIsGameover(t *testing.T) {
 	opts := MatchOpts{W: 7, H: 6, A: 4}
 
 	t.Run("Game Not Over", func(t *testing.T) {
-		match := createTestMatch(opts)
+		match, _ := NewMatch2D("p1", "p2", opts)
 		match.Board[5][0] = SLOT_PLAYER1
 		match.Moves = []Move{{Col: 0}}
 		if res := match.isGameover(5, 0); res != nil {
@@ -136,7 +122,7 @@ func TestIsGameover(t *testing.T) {
 		}
 	})
 	t.Run("Win - Many Lines", func(t *testing.T) {
-		match := createTestMatch(opts)
+		match, _ := NewMatch2D("p1", "p2", opts)
 		//h win
 		match.Board[5][1] = SLOT_PLAYER1
 		match.Board[5][2] = SLOT_PLAYER1
@@ -158,7 +144,7 @@ func TestIsGameover(t *testing.T) {
 	})
 	t.Run("Game Won", func(t *testing.T) {
 		t.Run("vertical", func(t *testing.T) {
-			match := createTestMatch(opts)
+			match, _ := NewMatch2D("p1", "p2", opts)
 			match.Board[4][3] = SLOT_PLAYER1
 			match.Board[3][3] = SLOT_PLAYER1
 			match.Board[2][3] = SLOT_PLAYER1
@@ -170,7 +156,7 @@ func TestIsGameover(t *testing.T) {
 			t.Log("vertical lines are: ", res["lines"])
 		})
 		t.Run("horizontal", func(t *testing.T) {
-			match := createTestMatch(opts)
+			match, _ := NewMatch2D("p1", "p2", opts)
 			match.Board[0][1] = SLOT_PLAYER1
 			match.Board[0][2] = SLOT_PLAYER1
 			match.Board[0][3] = SLOT_PLAYER1
@@ -182,7 +168,7 @@ func TestIsGameover(t *testing.T) {
 			t.Log("horizontal lines are: ", res["lines"])
 		})
 		t.Run("hv", func(t *testing.T) {
-			match := createTestMatch(opts)
+			match, _ := NewMatch2D("p1", "p2", opts)
 
 			match.Board[3][3] = SLOT_PLAYER1
 			match.Board[2][3] = SLOT_PLAYER1
@@ -203,17 +189,44 @@ func TestIsGameover(t *testing.T) {
 	})
 
 	t.Run("Game is a Draw", func(t *testing.T) {
-		drawOpts := MatchOpts{W: 2, H: 2, A: 3}
-		match := createTestMatch(drawOpts)
-		// Fill board in a draw pattern
-		match.Board[0][0], match.Board[0][1] = SLOT_PLAYER1, SLOT_PLAYER2
-		match.Board[1][0], match.Board[1][1] = SLOT_PLAYER2, SLOT_PLAYER1
-		match.Moves = make([]Move, 4) // Fill moves history
+		// A 3x3 board with A=3 can result in a draw.
+		opts := MatchOpts{W: 3, H: 3, A: 3, Starts1: true}
+		match, err := NewMatch2D("p1", "p2", opts)
+		if err != nil {
+			t.Fatalf("Failed to create match for draw test: %v", err)
+		}
 
-		// The last move at (0,0) does not create a win, but fills the board.
-		res := match.isGameover(0, 0)
+		// A sequence of moves that results in a draw
+		// Board state:
+		// p1 p2 p1
+		// p1 p2 p1
+		// p2 p1 p2
+		moves := []int{0, 1, 0, 1, 2, 2, 1, 0, 2}
+		players := []string{"p1", "p2", "p1", "p2", "p1", "p2", "p1", "p2", "p1"}
+
+		var res GameoverResult
+		for i, col := range moves {
+			// Figure out correct player based on turn
+			player := "p1"
+			if i%2 != 0 {
+				player = "p2"
+			}
+			if !opts.Starts1 {
+				if player == "p1" {
+					player = "p2"
+				} else {
+					player = "p1"
+				}
+			}
+
+			res, err = match.RegisterMove(Move{Col: col}, player)
+			if err != nil {
+				t.Fatalf("Move %d by %s in col %d failed: %v", i+1, players[i], col, err)
+			}
+		}
+
 		if res == nil {
-			t.Fatal("Expected a draw result, but got nil")
+			t.Fatal("Expected a draw result on the final move, but got nil")
 		}
 		if res["resType"] != RESULT_TYPE_DRAW {
 			t.Errorf("Expected result type DRAW, but got %v", res["resType"])
@@ -221,15 +234,14 @@ func TestIsGameover(t *testing.T) {
 	})
 }
 
-// TestRegisterMove provides a comprehensive test for the main game logic function.
 func TestRegisterMove(t *testing.T) {
 	p1ID := "player1"
 	p2ID := "player2"
 	opts := MatchOpts{W: 7, H: 6, A: 4, Starts1: true}
-	// Manually create match to avoid buggy constructor
-	match := createTestMatch(opts)
-	match.P1.ID = p1ID
-	match.P2.ID = p2ID
+	match, err := NewMatch2D(p1ID, p2ID, opts)
+	if err != nil {
+		t.Fatal("Failed to create match:", err)
+	}
 
 	t.Run("Successful move", func(t *testing.T) {
 		res, err := match.RegisterMove(Move{Col: 3}, p1ID)
@@ -266,9 +278,21 @@ func TestRegisterMove(t *testing.T) {
 		}
 	})
 
+	t.Run("Move in full column", func(t *testing.T) {
+		match, err := NewMatch2D(p1ID, p2ID, MatchOpts{W: 2, H: 1, A: 2, Starts1: true})
+		if err != nil {
+			t.Fatalf("NewMatch2D failed unexpectedly: %v", err)
+		}
+		_, _ = match.RegisterMove(Move{Col: 0}, p1ID)
+		_, _ = match.RegisterMove(Move{Col: 1}, p2ID)
+		_, err = match.RegisterMove(Move{Col: 0}, p1ID)
+		if err == nil || err.Error() != "invalid move. column is full" {
+			t.Errorf("Expected 'invalid move. column is full' error, got: %v", err)
+		}
+	})
+
 	t.Run("Move resulting in a win", func(t *testing.T) {
-		winMatch := createTestMatch(opts)
-		winMatch.P1.ID, winMatch.P2.ID = p1ID, p2ID
+		winMatch, _ := NewMatch2D(p1ID, p2ID, opts)
 		// Setup board for a win
 		_, _ = winMatch.RegisterMove(Move{Col: 0}, p1ID)
 		_, _ = winMatch.RegisterMove(Move{Col: 1}, p2ID)
@@ -289,4 +313,125 @@ func TestRegisterMove(t *testing.T) {
 			t.Errorf("Expected result type WON, got %v", res["resType"])
 		}
 	})
+
+	t.Run("Win on last move", func(t *testing.T) {
+		opts := MatchOpts{W: 2, H: 2, A: 2, Starts1: true}
+		match, _ := NewMatch2D(p1ID, p2ID, opts)
+		// Moves:
+		// p1 -> (1,0)
+		// p2 -> (0,0)
+		// p1 -> (1,1)
+		// p2 -> (0,1) makes a horizontal line for p2
+		_, _ = match.RegisterMove(Move{Col: 0}, p1ID)
+		_, _ = match.RegisterMove(Move{Col: 0}, p2ID)
+		_, _ = match.RegisterMove(Move{Col: 1}, p1ID)
+		res, err := match.RegisterMove(Move{Col: 1}, p2ID)
+
+		// Board state after moves:
+		// row 0: p2, p2
+		// row 1: p1, p1
+		// p2's move at (0,1) creates a horizontal win for p2.
+		// The board is also full.
+
+		if err != nil {
+			t.Fatalf("Winning move on full board produced an error: %v", err)
+		}
+		if res == nil {
+			t.Fatal("Expected a win result, but got nil")
+		}
+		if res["resType"] != RESULT_TYPE_WON {
+			t.Errorf("Expected result type WON, but got %v", res["resType"])
+		}
+	})
+}
+
+func TestNewMatch2D(t *testing.T) {
+	p1ID := "player1"
+	p2ID := "player2"
+
+	t.Run("Valid Match Creation", func(t *testing.T) {
+		opts := MatchOpts{W: 7, H: 6, A: 4, T0: 60000, TD: 10000}
+		match, err := NewMatch2D(p1ID, p2ID, opts)
+		if err != nil {
+			t.Fatalf("NewMatch2D failed with valid options: %v", err)
+		}
+		if match == nil {
+			t.Fatal("NewMatch2D returned nil with valid options")
+		}
+		if match.P1.ID != p1ID || match.P2.ID != p2ID {
+			t.Errorf("Players not initialized correctly")
+		}
+		if match.Opts.W != 7 || match.Opts.H != 6 || match.Opts.A != 4 {
+			t.Errorf("Match options not set correctly")
+		}
+		if len(match.Board) != 6 || len(match.Board[0]) != 7 {
+			t.Errorf("Board dimensions are incorrect")
+		}
+		if match.P1.TimeLeft != 60000 || match.P2.TimeLeft != 60000 {
+			t.Errorf("Player time not initialized correctly")
+		}
+	})
+
+	t.Run("Invalid Match Options", func(t *testing.T) {
+		// Zero width
+		_, err := NewMatch2D(p1ID, p2ID, MatchOpts{W: 0, H: 6, A: 4})
+		if err == nil {
+			t.Error("Expected error for zero width, got nil")
+		}
+		// Negative height
+		_, err = NewMatch2D(p1ID, p2ID, MatchOpts{W: 7, H: -1, A: 4})
+		if err == nil {
+			t.Error("Expected error for negative height, got nil")
+		}
+		// Alignment greater than dimensions
+		_, err = NewMatch2D(p1ID, p2ID, MatchOpts{W: 5, H: 5, A: 6})
+		if err == nil {
+			t.Error("Expected error for alignment > width and height, got nil")
+		}
+	})
+}
+
+func TestGetCurrPlayer(t *testing.T) {
+	p1ID := "p1"
+	p2ID := "p2"
+	opts := MatchOpts{W: 7, H: 6, A: 4, Starts1: true}
+	match, _ := NewMatch2D(p1ID, p2ID, opts)
+
+	// P1 starts
+	if match.getCurrPlayer() != p1ID {
+		t.Errorf("Expected P1 to be current player at start, got %s", match.getCurrPlayer())
+	}
+
+	// After 1 move, should be P2
+	match.Moves = append(match.Moves, Move{})
+	if match.getCurrPlayer() != p2ID {
+		t.Errorf("Expected P2 to be current player after 1 move, got %s", match.getCurrPlayer())
+	}
+
+	// P2 starts
+	match.Opts.Starts1 = false
+	match.Moves = []Move{} // Reset moves
+	if match.getCurrPlayer() != p2ID {
+		t.Errorf("Expected P2 to be current player at start, got %s", match.getCurrPlayer())
+	}
+
+	// After 1 move, should be P1
+	match.Moves = append(match.Moves, Move{})
+	if match.getCurrPlayer() != p1ID {
+		t.Errorf("Expected P1 to be current player after 1 move, got %s", match.getCurrPlayer())
+	}
+}
+
+func TestGetEnemyID(t *testing.T) {
+	match, _ := NewMatch2D("player-one", "player-two", MatchOpts{W: 7, H: 6, A: 4})
+
+	if enemy := match.GetEnemyID("player-one"); enemy != "player-two" {
+		t.Errorf("Expected enemy of player-one to be player-two, got %s", enemy)
+	}
+	if enemy := match.GetEnemyID("player-two"); enemy != "player-one" {
+		t.Errorf("Expected enemy of player-two to be player-one, got %s", enemy)
+	}
+	if enemy := match.GetEnemyID("non-existent-player"); enemy != "" {
+		t.Errorf("Expected empty string for non-existent player, got %s", enemy)
+	}
 }

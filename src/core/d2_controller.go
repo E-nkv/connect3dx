@@ -27,7 +27,12 @@ func (c *MatchController2D) CreateMatch(p1ID string, opts MatchOpts) (string, er
 	if err := validMatchOptions(opts); err != nil {
 		return "", fmt.Errorf("invalid match options: %s", err.Error())
 	}
-	m := NewMatch2D(p1ID, "", opts)
+
+	m, err := NewMatch2D(p1ID, "", opts)
+	if err != nil {
+		return "", err
+	}
+
 	id := uuid.New().String()
 	c.MatchesMutex.Lock()
 	c.Matches[id] = m
@@ -65,7 +70,7 @@ func validMatchOptions(opts MatchOpts) error {
 	if opts.A < 3 || opts.A > 15 {
 		errs = append(errs, "invalid A")
 	}
-	if opts.A > opts.W || opts.A > opts.H {
+	if opts.A > opts.W && opts.A > opts.H {
 		errs = append(errs, "A cant be bigger than W nor H")
 	}
 	errStr := strings.Join(errs, ", ")

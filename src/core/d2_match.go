@@ -61,13 +61,19 @@ type Player struct {
 
 func createBoard2D(W, H int) [][]Slot {
 	board := make([][]Slot, H)
-	for i := range H {
+	for i := 0; i < H; i++ {
 		board[i] = make([]Slot, W)
 	}
 	return board
 }
 
-func NewMatch2D(p1ID, p2ID string, opts MatchOpts) *Match2D {
+func NewMatch2D(p1ID, p2ID string, opts MatchOpts) (*Match2D, error) {
+	if opts.W <= 0 || opts.H <= 0 || opts.A <= 0 {
+		return nil, fmt.Errorf("invalid match options: dimensions and alignment must be positive")
+	}
+	if opts.A > opts.W && opts.A > opts.H {
+		return nil, fmt.Errorf("invalid match options: alignment must be less than or equal to width or height")
+	}
 	return &Match2D{
 		Opts: opts,
 		P1: Player{
@@ -80,7 +86,7 @@ func NewMatch2D(p1ID, p2ID string, opts MatchOpts) *Match2D {
 		},
 		Board: createBoard2D(opts.W, opts.H),
 		Moves: make([]Move, 0),
-	}
+	}, nil
 }
 
 type Match2D struct {
@@ -110,11 +116,8 @@ type Match2DDTO struct {
 type GameoverResult map[string]any
 
 func (m *Match2D) getCurrPlayer() string {
-	moves1 := false
-	if (m.Opts.Starts1 && len(m.Moves)%2 == 0) || (!m.Opts.Starts1 && len(m.Moves)%2 == 1) {
-		moves1 = true
-	}
-	if moves1 {
+	isP1Turn := (len(m.Moves)%2 == 0 && m.Opts.Starts1) || (len(m.Moves)%2 != 0 && !m.Opts.Starts1)
+	if isP1Turn {
 		return m.P1.ID
 	}
 	return m.P2.ID
@@ -142,6 +145,7 @@ func (m *Match2D) getVictoryLine(row, col int, dir Direction) Line {
 	v := m.Board[row][col]
 	if v == SLOT_EMPTY {
 		return nil
+
 	}
 	line := Line{Point{Row: row, Col: col}}
 
