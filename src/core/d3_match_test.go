@@ -118,6 +118,21 @@ func TestGetVictoryLine3D(t *testing.T) {
 // TestIsGameover3D tests the top-level game over logic.
 func TestIsGameover3D(t *testing.T) {
 	opts := MatchOpts3D{R: 4, C: 4, H: 4, A: 4}
+	directions := map[string]Direction3D{
+		"R_axis":         {Row: 1, Col: 0, H: 0},
+		"C_axis":         {Row: 0, Col: 1, H: 0},
+		"H_axis":         {Row: 0, Col: 0, H: 1},
+		"plane_RC_diag1": {Row: 1, Col: 1, H: 0},
+		"plane_RC_diag2": {Row: 1, Col: -1, H: 0},
+		"plane_RH_diag1": {Row: 1, Col: 0, H: 1},
+		"plane_RH_diag2": {Row: 1, Col: 0, H: -1},
+		"plane_CH_diag1": {Row: 0, Col: 1, H: 1},
+		"plane_CH_diag2": {Row: 0, Col: 1, H: -1},
+		"space_diag1":    {Row: 1, Col: 1, H: 1},
+		"space_diag2":    {Row: 1, Col: 1, H: -1},
+		"space_diag3":    {Row: 1, Col: -1, H: 1},
+		"space_diag4":    {Row: -1, Col: 1, H: 1},
+	}
 
 	t.Run("Game Not Over", func(t *testing.T) {
 		match := createTestMatch3D(opts)
@@ -128,16 +143,63 @@ func TestIsGameover3D(t *testing.T) {
 		}
 	})
 
-	t.Run("Game Won", func(t *testing.T) {
-		match := createTestMatch3D(opts)
-		// Vertical win
-		match.Board[1][1][0] = SLOT_PLAYER1
-		match.Board[1][1][1] = SLOT_PLAYER1
-		match.Board[1][1][2] = SLOT_PLAYER1
-		match.Board[1][1][3] = SLOT_PLAYER1
-		match.Moves = make([]Move3D, 4)
+	for name, dir := range directions {
+		t.Run(fmt.Sprintf("Game Won - %s", name), func(t *testing.T) {
+			match := createTestMatch3D(opts)
+			start := Point3D{Row: 0, Col: 0, H: 0}
+			if dir.Row < 0 {
+				start.Row = 3
+			}
+			if dir.Col < 0 {
+				start.Col = 3
+			}
+			if dir.H < 0 {
+				start.H = 3
+			}
 
-		res := match.isGameover(1, 1, 2) // Check from one of the winning pieces
+			points := make([]Point3D, 4)
+			for i := 0; i < 4; i++ {
+				p := Point3D{
+					Row: start.Row + i*dir.Row,
+					Col: start.Col + i*dir.Col,
+					H:   start.H + i*dir.H,
+				}
+				match.Board[p.Row][p.Col][p.H] = SLOT_PLAYER1
+				points[i] = p
+			}
+			match.Moves = make([]Move3D, 4)
+
+			// check from the last placed piece
+			checkPoint := points[3]
+			res := match.isGameover(checkPoint.Row, checkPoint.Col, checkPoint.H)
+			if res == nil {
+				t.Fatal("Expected a win result, but got nil")
+			}
+			if res["resType"] != RESULT_TYPE_WON {
+				t.Errorf("Expected result type WON, but got %v", res["resType"])
+			}
+			lines, ok := res["lines"].([]Line3D)
+			if !ok || len(lines) == 0 {
+				t.Errorf("Expected non-empty lines array, got %v", res["lines"])
+			}
+		})
+	}
+
+	t.Run("Game Won - 2 directions", func(t *testing.T) {
+		match := createTestMatch3D(opts)
+		// C-axis line, without the winning piece
+		match.Board[0][1][0] = SLOT_PLAYER1
+		match.Board[0][2][0] = SLOT_PLAYER1
+		match.Board[0][3][0] = SLOT_PLAYER1
+		// R-axis line, without the winning piece
+		match.Board[1][0][0] = SLOT_PLAYER1
+		match.Board[2][0][0] = SLOT_PLAYER1
+		match.Board[3][0][0] = SLOT_PLAYER1
+		match.Moves = make([]Move3D, 7)
+
+		// last move at (0,0,0), completes both lines
+		match.Board[0][0][0] = SLOT_PLAYER1
+		res := match.isGameover(0, 0, 0)
 		if res == nil {
 			t.Fatal("Expected a win result, but got nil")
 		}
@@ -145,20 +207,45 @@ func TestIsGameover3D(t *testing.T) {
 			t.Errorf("Expected result type WON, but got %v", res["resType"])
 		}
 		lines, ok := res["lines"].([]Line3D)
-		if !ok || len(lines) == 0 {
-			t.Errorf("Expected non-empty lines array, got %v", res["lines"])
+		if !ok || len(lines) < 2 {
+			t.Errorf("Expected at least 2 winning lines, got %d", len(lines))
+		}
+	})
+
+	t.Run("Game Won - 3 directions", func(t *testing.T) {
+		match := createTestMatch3D(opts)
+		// C-axis line
+		match.Board[0][1][0] = SLOT_PLAYER1
+		match.Board[0][2][0] = SLOT_PLAYER1
+		match.Board[0][3][0] = SLOT_PLAYER1
+		// R-axis line
+		match.Board[1][0][0] = SLOT_PLAYER1
+		match.Board[2][0][0] = SLOT_PLAYER1
+		match.Board[3][0][0] = SLOT_PLAYER1
+		// H-axis line
+		match.Board[0][0][1] = SLOT_PLAYER1
+		match.Board[0][0][2] = SLOT_PLAYER1
+		match.Board[0][0][3] = SLOT_PLAYER1
+		match.Moves = make([]Move3D, 9)
+
+		// last move at (0,0,0)
+		match.Board[0][0][0] = SLOT_PLAYER1
+		res := match.isGameover(0, 0, 0)
+		if res == nil {
+			t.Fatal("Expected a win result, but got nil")
+		}
+		if res["resType"] != RESULT_TYPE_WON {
+			t.Errorf("Expected result type WON, but got %v", res["resType"])
+		}
+		lines, ok := res["lines"].([]Line3D)
+		if !ok || len(lines) < 3 {
+			t.Errorf("Expected at least 3 winning lines, got %d", len(lines))
 		}
 	})
 
 	t.Run("Game is a Draw", func(t *testing.T) {
 		match := createTestMatch3D(opts)
-		// On an empty board, no winning lines can be found.
-		// We artificially set the move count to the max to trigger the draw condition.
 		match.Moves = make([]Move3D, opts.R*opts.C*opts.H)
-
-		// We check from a point that is SLOT_EMPTY.
-		// getVictoryLine should return nil immediately for all directions.
-		// isGameover should then proceed to the draw check.
 		res := match.isGameover(0, 0, 0)
 		if res == nil {
 			t.Fatal("Expected a draw result, but got nil")
